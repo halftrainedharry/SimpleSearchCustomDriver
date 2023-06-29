@@ -15,11 +15,9 @@ use xPDO\Om\xPDOQuery;
  */
 class Custom extends SimpleSearchDriver
 {
-    public string $searchString;
 
-    public function initialize(): bool
+    public function initialize()
     {
-        return true;
     }
 
     public function index(array $fields): bool
@@ -33,14 +31,14 @@ class Custom extends SimpleSearchDriver
     }
 
     /**
-     * @param string $string
+     * @param string $searchString
      * @param array $scriptProperties
      * @return array
      */
-    public function search($string, array $scriptProperties = array()) {
+    public function search($searchString, array $scriptProperties = array()) {
 
-        if (!empty($string)) {
-            $this->searchString = strip_tags($this->modx->sanitizeString($string));
+        if (!empty($searchString)) {
+            $searchString = strip_tags($this->modx->sanitizeString($searchString));
         }
 
         $ids           = $this->modx->getOption('ids', $scriptProperties, '');
@@ -114,98 +112,60 @@ class Custom extends SimpleSearchDriver
         }
 
         /* Process conditional clauses */
-        if ($searchStyle === 'partial' || $this->modx->config['dbtype'] === 'sqlsrv') {
-            $wildcard   = $matchWildcard ? '%' : '';
-            $whereArray = [];
-            $i = 1;
+        $wildcard   = $matchWildcard ? '%' : '';
+        $whereArray = [];
+        $i = 1;
 
-            $searchTerms = [ $this->searchString ];
-            if (empty($useAllWords)) {
-                $searchTerms = $this->search->searchArray;
+        $searchTerms = [ $this->searchString ];
+        if (empty($useAllWords)) {
+            $searchTerms = $this->search->searchArray;
+        }
+
+        foreach ($searchTerms as $term) {
+            if ($i > $maxWords) {
+                break;
             }
 
-            foreach ($searchTerms as $term) {
-                if ($i > $maxWords) {
-                    break;
-                }
+            $whereArrayKeys = [];
+            $whereArrayValues = [];
+            $term = $wildcard . $term . $wildcard;
 
-                $whereArrayKeys = [];
-                $whereArrayValues = [];
-                $term = $wildcard . $term . $wildcard;
-
-                foreach ($docFields as $field) {
-                    $whereArrayKeys[] = 'OR:' . $field . ':LIKE';
-                    $whereArrayValues[] = $term;
-                }
-
-                if ($includeTVs) {
-                    $whereArrayKeys[] = 'OR:TemplateVarResources.value:LIKE';
-                    $whereArrayValues[] = $term;
-                    if (!empty($includeTVList)) {
-                        $whereArrayKeys[] = 'AND:TemplateVarResources.tmplvarid:IN';
-                        $whereArrayValues[] = $includedTVIds;
-                    }
-                }
-
-                if (is_array($customPackages) && !empty($customPackages)) {
-                    foreach ($customPackages as $package) {
-                        $fields = explode(',', $package[1]);
-                        foreach ($fields as $field) {
-                            $classAlias = $this->modx->getAlias($package[0]);
-                            $whereArrayKeys[] = 'OR:' . $classAlias . '.' . $field . ':LIKE';
-                            $whereArrayValues[] = $term;
-                        }
-                    }
-                }
-
-                if (count($whereArrayKeys) > 0) {
-                    if ($andTerms) {
-                        $whereArrayKeys[0] = preg_replace('/^OR:/', '', $whereArrayKeys[0]);
-                    }
-                    $whereArray[] = array_combine($whereArrayKeys, $whereArrayValues);
-                }
-
-                $i++;
+            foreach ($docFields as $field) {
+                $whereArrayKeys[] = 'OR:' . $field . ':LIKE';
+                $whereArrayValues[] = $term;
             }
 
-            $c->where($whereArray);
-        } else {
-            $fields = $this->modx->getSelectColumns(modResource::class, '', '', $docFields);
+            if ($includeTVs) {
+                $whereArrayKeys[] = 'OR:TemplateVarResources.value:LIKE';
+                $whereArrayValues[] = $term;
+                if (!empty($includeTVList)) {
+                    $whereArrayKeys[] = 'AND:TemplateVarResources.tmplvarid:IN';
+                    $whereArrayValues[] = $includedTVIds;
+                }
+            }
+
             if (is_array($customPackages) && !empty($customPackages)) {
                 foreach ($customPackages as $package) {
-                    $classAlias = $this->modx->getAlias($package[0]);
-                    $fields .= (!empty($fields) ? ',' : '') . $this->modx->getSelectColumns($package[0], $classAlias, '', explode(',', $package[1]));
-                    if (!empty($package[4])) {
-                        $c->where($package[4]);
+                    $fields = explode(',', $package[1]);
+                    foreach ($fields as $field) {
+                        $classAlias = $this->modx->getAlias($package[0]);
+                        $whereArrayKeys[] = 'OR:' . $classAlias . '.' . $field . ':LIKE';
+                        $whereArrayValues[] = $term;
                     }
                 }
             }
 
-            $wildcard       = $matchWildcard ? '*' : '';
-            $relevancyTerms = array();
-            if (empty($useAllWords)) {
-                $i = 0;
-                foreach ($this->search->searchArray as $term) {
-                    if ($i > $maxWords) {
-                        break;
-                    }
-
-                    $relevancyTerms[] = $this->modx->quote($term . $wildcard);
-
-                    $i++;
+            if (count($whereArrayKeys) > 0) {
+                if ($andTerms) {
+                    $whereArrayKeys[0] = preg_replace('/^OR:/', '', $whereArrayKeys[0]);
                 }
-            } else {
-                $relevancyTerms[] = $this->modx->quote($string . $wildcard);
+                $whereArray[] = array_combine($whereArrayKeys, $whereArrayValues);
             }
 
-            $this->addRelevancyCondition($c,
-                array(
-                    'class'  => 'modResource',
-                    'fields' => $fields,
-                    'terms'  => $relevancyTerms
-                )
-            );
+            $i++;
         }
+
+        $c->where($whereArray);
 
         if (!empty($ids)) {
             $idType = $this->modx->getOption('idType', $this->config, 'parents');
@@ -301,24 +261,4 @@ class Custom extends SimpleSearchDriver
         );
     }
 
-    /**
-     * add relevancy search criteria to query
-     *
-     * @param xPDOQuery $query
-     * @param array $options ['terms'] search terms (will only be one array member if useAllWords parameter is set)
-     * @return boolean
-     */
-    public function addRelevancyCondition(xPDOQuery &$query, array $options): bool
-    {
-        $fields = $this->modx->getOption('fields', $options, '');
-        $terms  = $this->modx->getOption('terms', $options, array());
-
-        if (!empty($fields)) {
-            foreach($terms as $term) {
-                $query->where("MATCH ( {$fields} ) AGAINST ( {$term} IN BOOLEAN MODE )");
-            }
-        }
-
-        return true;
-    }
 }
