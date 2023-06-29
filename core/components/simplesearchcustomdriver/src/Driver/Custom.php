@@ -35,7 +35,7 @@ class Custom extends SimpleSearchDriver
      * @param array $scriptProperties
      * @return array
      */
-    public function search($searchString, array $scriptProperties = array()) {
+    public function search($searchString, array $scriptProperties = []) {
 
         if (!empty($searchString)) {
             $searchString = strip_tags($this->modx->sanitizeString($searchString));
@@ -52,7 +52,7 @@ class Custom extends SimpleSearchDriver
         $docFields     = explode(',', $this->modx->getOption('docFields', $scriptProperties, 'pagetitle,longtitle,alias,description,introtext,content'));
         $includeTVs    = $this->modx->getOption('includeTVs', $scriptProperties, false);
         $includeTVList = $this->modx->getOption('includeTVList', $scriptProperties, '');
-        $includedTVIds = array();
+        $includedTVIds = [];
 
 
         $c = $this->modx->newQuery(modResource::class);
@@ -75,21 +75,21 @@ class Custom extends SimpleSearchDriver
         }
 
         /* If using customPackages, add here */
-        $customPackages = array();
+        $customPackages = [];
         if (!empty($scriptProperties['customPackages'])) {
             $packages = explode('||', $scriptProperties['customPackages']);
             if (is_array($packages) && !empty($packages)) {
-                $searchArray = array(
+                $searchArray = [
                     '{core_path}',
                     '{assets_path}',
                     '{base_path}',
-                );
+                ];
 
-                $replacePaths = array(
+                $replacePaths = [
                     $this->modx->getOption('core_path', null, MODX_CORE_PATH),
                     $this->modx->getOption('assets_path', null, MODX_ASSETS_PATH),
                     $this->modx->getOption('base_path', null, MODX_BASE_PATH),
-                );
+                ];
                 foreach ($packages as $package) {
                     /* 0: class name, 1: field name(s) (csl), 2: package name, 3: package path, 4: criteria */
                     $package = explode(':', $package);
@@ -179,7 +179,7 @@ class Custom extends SimpleSearchDriver
                 $ids = array_diff($ids, explode(',', $exclude));
             }
 
-            $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', array('id'));
+            $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', ['id']);
 
             $c->where(["$f:IN" => $ids]);
         }
@@ -190,7 +190,7 @@ class Custom extends SimpleSearchDriver
 
         /* Restrict to either this context or specified contexts */
         $ctx = !empty($this->config['contexts']) ? $this->config['contexts'] : $this->modx->context->get('key');
-        $f   = $this->modx->getSelectColumns(modResource::class, 'modResource','', array('context_key'));
+        $f   = $this->modx->getSelectColumns(modResource::class, 'modResource','', ['context_key']);
         $c->where(["$f:IN" => explode(',', $ctx)]);
 
         if ($hideMenu !== 2) {
@@ -199,8 +199,18 @@ class Custom extends SimpleSearchDriver
 
         $total = $this->modx->getCount(modResource::class, $c);
 
+        /* Set limit */
+        $perPage = (int) $this->modx->getOption('perPage', $this->config, 10);
+        $offset      = $this->modx->getOption('start', $this->config, 0);
+        $offsetIndex = $this->modx->getOption('offsetIndex', $this->config, 'simplesearch_offset');
+        if (isset($_REQUEST[$offsetIndex])) {
+            $offset = (int) $_REQUEST[$offsetIndex];
+        }
+
         $c->query['distinct'] = 'DISTINCT';
+
         if (!empty($scriptProperties['sortBy'])) {
+            // sort and limit resources with SQL
             $sortDir  = $this->modx->getOption('sortDir', $scriptProperties, 'DESC');
             $sortDirs = explode(',', $sortDir);
             $sortBys  = explode(',', $scriptProperties['sortBy']);
@@ -212,30 +222,24 @@ class Custom extends SimpleSearchDriver
 
                 $c->sortby('modResource.' . $sortBys[$i], strtoupper($dir));
             }
+            if ($perPage > 0) {
+                $c->limit($perPage, $offset);
+            }
         }
 
         $resources = $this->modx->getCollection(modResource::class, $c);
+
         if (empty($scriptProperties['sortBy'])) {
+            // sort and limit resources in PHP
             $resources = $this->sortResults($resources, $scriptProperties);
-        }
-
-        /* Set limit */
-        $perPage = (int) $this->modx->getOption('perPage', $this->config, 10);
-        if ($perPage > 0) {
-            $offset      = $this->modx->getOption('start', $this->config, 0);
-            $offsetIndex = $this->modx->getOption('offsetIndex', $this->config, 'simplesearch_offset');
-
-            if (isset($_REQUEST[$offsetIndex])) {
-                $offset = (int) $_REQUEST[$offsetIndex];
+            if ($perPage > 0) {
+                $resources = array_slice($resources, $offset, $perPage);
             }
-
-            $resources = array_slice($resources, $offset, $perPage);
         }
 
-        $includeTVs = $this->modx->getOption('includeTVs', $scriptProperties, '');
         $processTVs = $this->modx->getOption('processTVs', $scriptProperties, '');
         $tvPrefix   = $this->modx->getOption('tvPrefix', $scriptProperties, '');
-        $list       = array();
+        $list       = [];
 
         /** @var modResource $resource */
         foreach ($resources as $resource) {
@@ -255,10 +259,10 @@ class Custom extends SimpleSearchDriver
             $list[] = $resourceArray;
         }
 
-        return array(
+        return [
             'total'   => $total,
             'results' => $list,
-        );
+        ];
     }
 
 }
