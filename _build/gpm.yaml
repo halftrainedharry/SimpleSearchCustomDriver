@@ -1,0 +1,8 @@
+name: SimpleSearchCustomDriver
+lowCaseName: simplesearchcustomdriver
+description: An example of a custom driver for the extra SimpleSearch.
+author: halftrainedharry
+version: 1.0.0-alpha
+build:
+  requires:
+      modx: '>=3.0.0-alpha'
