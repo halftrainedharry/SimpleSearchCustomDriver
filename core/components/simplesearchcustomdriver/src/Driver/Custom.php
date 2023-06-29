@@ -173,15 +173,15 @@ class Custom extends SimpleSearchDriver
             $ids    = $this->processIds($ids, $idType, $depth);
             if (!empty($exclude)) {
                 $exclude = $this->cleanIds($exclude);
-                /* No need to build 'NOT IN' array because we will remove these from the 'IN' array */
-                /* $c->where(array("{$f}:NOT IN" => explode(',', $exclude)),xPDOQuery::SQL_AND,null,2); */
-
-                $ids = array_diff($ids, explode(',', $exclude));
+                $ids = array_diff($ids, explode(',', $exclude)); // remove excluded ids from the 'IN' array
             }
 
             $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', ['id']);
-
             $c->where(["$f:IN" => $ids]);
+        } elseif (!empty($exclude)) {
+            $exclude = $this->cleanIds($exclude);
+            $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', ['id']);
+            $c->where(["{$f}:NOT IN" => explode(',', $exclude)]);
         }
 
         $c->where(['published:=' => 1]);
