@@ -50,6 +50,7 @@ class PdoFetchDriver extends SimpleSearchDriver
         $ids = $this->modx->getOption('ids', $scriptProperties, '');
         $exclude = $this->modx->getOption('exclude', $scriptProperties, '');
         $hideMenu = (int) $this->modx->getOption('hideMenu', $scriptProperties, 2);
+        $customWhere = trim($this->modx->getOption('where', $scriptProperties, ''));
 
         $docFields = array_map('trim', explode(',', $this->modx->getOption('docFields', $scriptProperties, 'pagetitle,longtitle,alias,description,introtext,content')));
         $docFields = array_filter($docFields); //remove empty elements
@@ -59,6 +60,18 @@ class PdoFetchDriver extends SimpleSearchDriver
         $tvPrefix = $this->modx->getOption('tvPrefix', $scriptProperties, '');
 
         $isDebug = $this->modx->getOption('debug', $scriptProperties, false);
+
+        if (!$this->modx->services->has(Fetch::class)) {
+            $err_msg = 'pdoTools not available. Searching with the PdoFetchDriver is not possible.';
+            $this->modx->log(\modX::LOG_LEVEL_ERROR, $err_msg);
+            if ($isDebug){
+                $this->modx->setPlaceholder('pdoFetchLog', $err_msg);
+            }
+            return [
+                'total' => 0,
+                'results' => [],
+            ];
+        }
 
         $pdotools_config = [];
 
@@ -200,6 +213,17 @@ class PdoFetchDriver extends SimpleSearchDriver
             $where[] = ['hidemenu' => $hideMenu === 1];
         }
 
+        // Add custom where conditions
+        if (!empty($customWhere)) {
+            if (is_string($customWhere) && ($customWhere[0] === '{' || $customWhere[0] === '[')) {
+                $customWhere = json_decode($customWhere, true);
+            }
+            if (!is_array($customWhere)) {
+                $customWhere = [$customWhere];
+            }
+            $where[] = $customWhere;
+        }
+
         // Set limit
         $perPage = (int) $this->modx->getOption('perPage', $this->config, 10);
         $offset = $this->modx->getOption('start', $this->config, 0);
@@ -267,7 +291,6 @@ class PdoFetchDriver extends SimpleSearchDriver
 
         $list = [];
 
-        /** @var modResource $resource */
         foreach ($resources as $resource) {
             // check 'list' permission
             $object = $this->modx->newObject(modResource::class);
