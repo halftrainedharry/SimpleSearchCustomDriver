@@ -116,7 +116,7 @@ class Custom extends SimpleSearchDriver
         $whereArray = [];
         $i = 1;
 
-        $searchTerms = [ $this->searchString ];
+        $searchTerms = [ $searchString ];
         if (empty($useAllWords)) {
             $searchTerms = $this->search->searchArray;
         }
