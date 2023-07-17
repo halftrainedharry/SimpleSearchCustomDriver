@@ -5,6 +5,7 @@ use PDO;
 use SimpleSearch\Driver\SimpleSearchDriver;
 use MODX\Revolution\modResource;
 use MODX\Revolution\modTemplateVar;
+use MODX\Revolution\modTemplateVarTemplate;
 use MODX\Revolution\modTemplateVarResource;
 use xPDO\Om\xPDOQuery;
 
@@ -68,15 +69,22 @@ class Custom extends SimpleSearchDriver
         $includedTVAliases = [];
         if (count($includeTVList) > 0) {
             $q = $this->modx->newQuery(modTemplateVar::class, ['name:IN' => $includeTVList]);
+            $q->leftJoin(modTemplateVarTemplate::class, 'TemplateVarTemplates');
             $q->select('id,name,type,default_text');
+            $q->select('GROUP_CONCAT(templateid) AS templateids');
+            $q->groupBy('id,name,type,default_text');
             if ($q->prepare() && $q->stmt->execute()) {
                 while ($tv = $q->stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $name = strtolower($tv['name']);
-                    $alias_tv = 'TV' . $name;
-                    $output_name = $tvPrefix . $tv['name'];
-                    $includedTVAliases[] = $alias_tv;
-                    $c->leftJoin(modTemplateVarResource::class, $alias_tv, "`{$alias_tv}`.`contentid` = `modResource`.`id` AND `{$alias_tv}`.`tmplvarid` = {$tv['id']}");
-                    $c->select("IFNULL(`{$alias_tv}`.`value`, {$this->modx->quote($tv['default_text'])}) AS `{$output_name}`");
+                    $templateIds = $tv['templateids'];
+                    $tvAlias = 'TV' . strtolower($tv['name']);
+                    $outputName = $tvPrefix . $tv['name'];
+                    $includedTVAliases[] = $tvAlias;
+                    $c->leftJoin(modTemplateVarResource::class, $tvAlias, "`{$tvAlias}`.`contentid` = `modResource`.`id` AND `{$tvAlias}`.`tmplvarid` = {$tv['id']}");
+                    if ($tv['default_text']){
+                        $c->select("CASE WHEN `modResource`.`template` IN ({$templateIds}) THEN IFNULL(`{$tvAlias}`.`value`, {$this->modx->quote($tv['default_text'])}) ELSE '' END AS `{$outputName}`");
+                    } else {
+                        $c->select("IFNULL(`{$tvAlias}`.`value`, '') AS `{$outputName}`");
+                    }
                 }
             }
         }
@@ -117,7 +125,7 @@ class Custom extends SimpleSearchDriver
                         $fields = array_unique(array_filter($fields));
                         $c->select($this->modx->getSelectColumns($className, $classAlias, $classAlias . '.', $fields));
 
-                        $fields = array_map(function ($name) use ($classAlias) { return $classAlias . '.' . $name; }, $fields);
+                        $fields = array_map(function ($fieldName) use ($classAlias) { return $classAlias . '.' . $fieldName; }, $fields);
                         $package[1] = $fields;
 
                         $customPackages[] = $package;
@@ -154,8 +162,8 @@ class Custom extends SimpleSearchDriver
 
             // TVs
             if (count($includedTVAliases) > 0) {
-                foreach ($includedTVAliases as $alias_tv) {
-                    $whereArrayKeys[] = "OR:`{$alias_tv}`.`value`:LIKE";
+                foreach ($includedTVAliases as $tvAlias) {
+                    $whereArrayKeys[] = "OR:`{$tvAlias}`.`value`:LIKE";
                     $whereArrayValues[] = $term;
                 }
             }
@@ -279,8 +287,8 @@ class Custom extends SimpleSearchDriver
             }
         } else {
             $errors = $c->stmt->errorInfo();
-            $err_msg = 'Could not process query, error #' . $errors[0] . ': ' . $errors[1] . ': ' . $errors[2];
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, $err_msg);
+            $errMsg = 'Could not process query, error #' . $errors[0] . ': ' . $errors[1] . ': ' . $errors[2];
+            $this->modx->log(\modX::LOG_LEVEL_ERROR, $errMsg);
         }
 
         if (empty($scriptProperties['sortBy'])) {
