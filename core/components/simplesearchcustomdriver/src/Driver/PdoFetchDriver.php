@@ -10,7 +10,7 @@ use xPDO\Om\xPDOQuery;
 use ModxPro\PdoTools\Fetch;
 
 /**
- * Standard sql-based search driver for SimpleSearch
+ * SimpleSearch driver that uses the class "pdoFetch" (from the extra "pdoTools") to query the data.
  *
  * @package simplesearch
  */
