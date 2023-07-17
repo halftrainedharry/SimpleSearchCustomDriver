@@ -244,31 +244,46 @@ class Custom extends SimpleSearchDriver
 
         $c->query['distinct'] = 'DISTINCT';
 
-        if (!empty($scriptProperties['sortBy'])) {
+        $sortBy = $this->modx->getOption('sortBy', $scriptProperties, '');
+        $maxCountPhpSort = (int) $this->modx->getOption('maxCountPhpSort', $scriptProperties, 0);
+        if ($maxCountPhpSort && $total > $maxCountPhpSort){
+            // Too many results to sort in PHP -> Use limit in SQL-Query
+            $fallbackSortBy = $this->modx->getOption('fallbackSortBy', $scriptProperties, '');
+            if ($fallbackSortBy) {
+                $sortBy = $fallbackSortBy;
+            } else {
+                $sortBy = 'id';
+            }
+        }
+
+        if (!empty($sortBy)) {
             // sort and limit resources with SQL
             $sortDir = $this->modx->getOption('sortDir', $scriptProperties, 'DESC');
             $sortDirs = array_map('trim', explode(',', $sortDir));
-            $sortBys = array_map('trim', explode(',', $scriptProperties['sortBy']));
+            $sortBys = array_map('trim', explode(',', $sortBy));
             $dir = 'desc';
             $resourceColumns = $this->modx->getFields(modResource::class);
             for ($i = 0, $iMax = count($sortBys); $i < $iMax; $i++) {
-                $sortBy = $sortBys[$i];
+                $by = $sortBys[$i];
                 if (isset($sortDirs[$i])) {
                     $dir = $sortDirs[$i];
                 }
 
-                if (array_key_exists($sortBy, $resourceColumns)) {
-                    $c->sortby("`modResource`.`{$sortBy}`", strtoupper($dir));
-                } elseif (in_array($sortBy, $includeTVList)) {
-                    $tvName = strtolower($sortBy);
+                if (array_key_exists($by, $resourceColumns)) {
+                    $c->sortby("`modResource`.`{$by}`", strtoupper($dir));
+                } elseif (in_array($by, $includeTVList)) {
+                    $tvName = strtolower($by);
                     $c->sortby("`TV{$tvName}`.`value`", strtoupper($dir));
                 } else {
-                    $c->sortby($sortBy, strtoupper($dir));
+                    $c->sortby($by, strtoupper($dir));
                 }
             }
             if ($perPage > 0) {
                 $c->limit($perPage, $offset);
             }
+        } else {
+            // Just to be sure that the order is always the same for every page
+            $c->sortby('`modResource`.`id`', 'ASC');
         }
 
         $c->prepare();
@@ -291,7 +306,7 @@ class Custom extends SimpleSearchDriver
             $this->modx->log(\modX::LOG_LEVEL_ERROR, $errMsg);
         }
 
-        if (empty($scriptProperties['sortBy'])) {
+        if (empty($sortBy)) {
             // sort and limit resources in PHP
             $resources = $this->sortResults($resources, $scriptProperties);
             if ($perPage > 0) {
