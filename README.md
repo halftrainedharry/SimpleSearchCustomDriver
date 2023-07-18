@@ -76,8 +76,6 @@ Set the system setting `simplesearch.driver_class` to `SimpleSearchCustomDriver\
 The property `` &includeTVs=`1` `` can't be used in this driver to search in all available TVs.
 Only the TVs listed in the property `includeTVList` are used for the search and the sorting.
 
-Also, the default values of TVs are not taken into account for the search.
-
 ## PdoFetchDriver
 
 This driver uses the class *pdoFetch* (from the extra *pdoTools*) to query the data.

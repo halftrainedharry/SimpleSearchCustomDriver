@@ -66,7 +66,7 @@ class Custom extends SimpleSearchDriver
         $c = $this->modx->newQuery(modResource::class);
         $c->select($this->modx->getSelectColumns(modResource::class, 'modResource')); // Select all fields from modResource
 
-        $includedTVAliases = [];
+        $includedTVs = [];
         if (count($includeTVList) > 0) {
             $q = $this->modx->newQuery(modTemplateVar::class, ['name:IN' => $includeTVList]);
             $q->leftJoin(modTemplateVarTemplate::class, 'TemplateVarTemplates');
@@ -78,13 +78,14 @@ class Custom extends SimpleSearchDriver
                     $templateIds = $tv['templateids'];
                     $tvAlias = 'TV' . strtolower($tv['name']);
                     $outputName = $tvPrefix . $tv['name'];
-                    $includedTVAliases[] = $tvAlias;
                     $c->leftJoin(modTemplateVarResource::class, $tvAlias, "`{$tvAlias}`.`contentid` = `modResource`.`id` AND `{$tvAlias}`.`tmplvarid` = {$tv['id']}");
                     if ($tv['default_text']){
                         $c->select("CASE WHEN `modResource`.`template` IN ({$templateIds}) THEN IFNULL(`{$tvAlias}`.`value`, {$this->modx->quote($tv['default_text'])}) ELSE '' END AS `{$outputName}`");
                     } else {
                         $c->select("IFNULL(`{$tvAlias}`.`value`, '') AS `{$outputName}`");
                     }
+                    $tv['tvAlias'] = $tvAlias;
+                    $includedTVs[] = $tv;
                 }
             }
         }
@@ -153,6 +154,7 @@ class Custom extends SimpleSearchDriver
 
             $whereArrayKeys = [];
             $whereArrayValues = [];
+            $originalTerm = $term;
             $term = $wildcard . $term . $wildcard;
 
             foreach ($docFields as $field) {
@@ -161,10 +163,23 @@ class Custom extends SimpleSearchDriver
             }
 
             // TVs
-            if (count($includedTVAliases) > 0) {
-                foreach ($includedTVAliases as $tvAlias) {
-                    $whereArrayKeys[] = "OR:`{$tvAlias}`.`value`:LIKE";
+            if (count($includedTVs) > 0) {
+                foreach ($includedTVs as $tv) {
+                    $whereArrayKeys[] = "OR:`{$tv['tvAlias']}`.`value`:LIKE";
                     $whereArrayValues[] = $term;
+
+                    if ($tv['default_text']){
+                        //Test if default value matches search term
+                        $queryTerm = preg_quote($originalTerm,'/');
+                        $regex = ($matchWildcard) ? "/{$queryTerm}/i" : "/^{$queryTerm}$/i";
+                        if (preg_match($regex, $tv['default_text'])){
+                            $whereArrayKeys[] = "OR:`{$tv['tvAlias']}`.`value`:IS";
+                            $whereArrayValues[] = null;
+
+                            $whereArrayKeys[] = 'AND:`modResource`.`template`:IN';
+                            $whereArrayValues[] = explode(',', $tv['templateids']);
+                        }
+                    }
                 }
             }
 
