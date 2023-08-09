@@ -261,7 +261,7 @@ class Custom extends SimpleSearchDriver
 
         $sortBy = $this->modx->getOption('sortBy', $scriptProperties, '');
         $maxCountPhpSort = (int) $this->modx->getOption('maxCountPhpSort', $scriptProperties, 0);
-        if ($maxCountPhpSort && $total > $maxCountPhpSort){
+        if (empty($sortBy) && $maxCountPhpSort && $total > $maxCountPhpSort) {
             // Too many results to sort in PHP -> Use limit in SQL-Query
             $fallbackSortBy = $this->modx->getOption('fallbackSortBy', $scriptProperties, '');
             if ($fallbackSortBy) {
