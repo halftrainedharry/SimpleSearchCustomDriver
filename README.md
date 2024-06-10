@@ -61,7 +61,7 @@ Set the system setting `simplesearch.driver_class` to `SimpleSearchCustomDriver\
 
 * For debugging purposes, the generated SQL query is set as a placeholder. The placeholder `[[+score]]` is added to the template to check the score calculation.
 ```
-<pre>[[!SimpleSearchCustomDriver.SQL]]</pre>
+<pre>[[!+SimpleSearchCustomDriver.SQL]]</pre>
 
 [[!SimpleSearchForm]]
 <h2>Results</h2>
